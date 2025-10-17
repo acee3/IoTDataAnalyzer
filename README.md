@@ -126,3 +126,8 @@ Examples:
 - CSV input is streamed row by row. No full in-memory load.
 - Statistics operate in streaming fashion; only aggregates or small per-group summaries are maintained.
 - Two passes are used for some statistics, which mean the file is iterated twice
+
+
+## Testing
+- run "mypy iotanalyzer/" to run mypy
+- run "pytest" to run test cases
