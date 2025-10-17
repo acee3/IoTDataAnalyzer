@@ -8,6 +8,10 @@ class Metric(Enum):
     HUMIDITY = {"hum", "humidity"}
     PRESSURE = {"press", "pressure"}
     
+    @property
+    def alias_set(self) -> set[str]:
+        return self.value
+
     @classmethod
     def from_string(cls, metric_name: str) -> "Metric":
         """Convert a string to a Metruc enum, handling aliases and casing
@@ -19,16 +23,20 @@ class Metric(Enum):
             ValueError: If the metric name is not found
         """
         for metric in cls:
-            if metric_name.strip().lower() in metric.value:
+            if metric_name.strip().lower() in metric.alias_set:
                 return metric
         raise ValueError(f"Unknown metric: {metric_name}")
 
 
 class Unit(Enum):
-    RELATIVE_HUMIDITY = ("%RH", Metric.HUMIDITY)
-    KILO_PASCAL = ("kPa", Metric.PRESSURE)
-    CELSIUS = ("C", Metric.TEMPERATURE)
-    
+    RELATIVE_HUMIDITY = ({"%rh"}, Metric.HUMIDITY)
+    KILO_PASCAL = ({"kpa"}, Metric.PRESSURE)
+    CELSIUS = ({"c"}, Metric.TEMPERATURE)
+
+    @property
+    def alias_set(self) -> set[str]:
+        return self.value[0]
+
     @property
     def metric(self) -> Metric:
         return self.value[1]
@@ -44,7 +52,7 @@ class Unit(Enum):
             ValueError: If the unit name is not found
         """
         for unit in cls:
-            if unit_name.strip().lower() in unit.value:
+            if unit_name.strip().lower() in unit.alias_set:
                 return unit
         raise ValueError(f"Unknown unit: {unit_name}")
 
