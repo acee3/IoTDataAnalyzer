@@ -36,11 +36,23 @@ def test_average_statistic_groups_by_site_device_metric():
 
     result = stats.get_result()
 
-    expected_lines = {
+    expected_lines = [
         "dev1/site1 Humidity\t=\t45.00%RH",
         "dev2/site2 Temperature\t=\t20.00°C",
-    }
-    assert set(result.splitlines()) == expected_lines
+    ]
+    assert result.splitlines() == expected_lines
+
+    asc_lines = stats.get_result(sort_key="value_asc").splitlines()
+    assert asc_lines == [
+        "dev2/site2 Temperature\t=\t20.00°C",
+        "dev1/site1 Humidity\t=\t45.00%RH",
+    ]
+
+    desc_lines = stats.get_result(sort_key="value_desc").splitlines()
+    assert desc_lines == [
+        "dev1/site1 Humidity\t=\t45.00%RH",
+        "dev2/site2 Temperature\t=\t20.00°C",
+    ]
 
 
 def test_average_statistic_handles_no_data():
@@ -63,8 +75,26 @@ def test_min_statistic_reports_group_minima():
     stats.begin_pass(is_second_pass=False)
     stats.consume(make_record("site1", "dev1", Metric.HUMIDITY, Unit.RELATIVE_HUMIDITY, 55.0))
     stats.consume(make_record("site1", "dev1", Metric.HUMIDITY, Unit.RELATIVE_HUMIDITY, 48.0))
+    stats.consume(make_record("site2", "dev2", Metric.HUMIDITY, Unit.RELATIVE_HUMIDITY, 46.0))
+    stats.consume(make_record("site2", "dev2", Metric.HUMIDITY, Unit.RELATIVE_HUMIDITY, 47.0))
 
-    assert stats.get_result() == "dev1/site1 Humidity\t=\t48.00%RH"
+    expected_device = [
+        "dev1/site1 Humidity\t=\t48.00%RH",
+        "dev2/site2 Humidity\t=\t46.00%RH",
+    ]
+    assert stats.get_result().splitlines() == expected_device
+
+    expected_asc = [
+        "dev2/site2 Humidity\t=\t46.00%RH",
+        "dev1/site1 Humidity\t=\t48.00%RH",
+    ]
+    assert stats.get_result(sort_key="value_asc").splitlines() == expected_asc
+
+    expected_desc = [
+        "dev1/site1 Humidity\t=\t48.00%RH",
+        "dev2/site2 Humidity\t=\t46.00%RH",
+    ]
+    assert stats.get_result(sort_key="value_desc").splitlines() == expected_desc
 
 
 def test_max_statistic_reports_group_maxima():
@@ -72,8 +102,26 @@ def test_max_statistic_reports_group_maxima():
     stats.begin_pass(is_second_pass=False)
     stats.consume(make_record("site1", "dev1", Metric.TEMPERATURE, Unit.CELSIUS, 18.0))
     stats.consume(make_record("site1", "dev1", Metric.TEMPERATURE, Unit.CELSIUS, 24.0))
+    stats.consume(make_record("site2", "dev2", Metric.TEMPERATURE, Unit.CELSIUS, 22.0))
+    stats.consume(make_record("site2", "dev2", Metric.TEMPERATURE, Unit.CELSIUS, 19.0))
 
-    assert stats.get_result() == "dev1/site1 Temperature\t=\t24.00°C"
+    expected_device = [
+        "dev1/site1 Temperature\t=\t24.00°C",
+        "dev2/site2 Temperature\t=\t22.00°C",
+    ]
+    assert stats.get_result().splitlines() == expected_device
+
+    expected_asc = [
+        "dev2/site2 Temperature\t=\t22.00°C",
+        "dev1/site1 Temperature\t=\t24.00°C",
+    ]
+    assert stats.get_result(sort_key="value_asc").splitlines() == expected_asc
+
+    expected_desc = [
+        "dev1/site1 Temperature\t=\t24.00°C",
+        "dev2/site2 Temperature\t=\t22.00°C",
+    ]
+    assert stats.get_result(sort_key="value_desc").splitlines() == expected_desc
 
 
 def test_count_statistic_counts_records_per_group():
@@ -83,24 +131,49 @@ def test_count_statistic_counts_records_per_group():
     stats.consume(make_record("site1", "dev1", Metric.PRESSURE, Unit.KILO_PASCAL, 102.0))
     stats.consume(make_record("site2", "dev2", Metric.PRESSURE, Unit.KILO_PASCAL, 103.0))
 
-    lines = set(stats.get_result().splitlines())
-    assert lines == {
+    expected_device = [
         "dev1/site1 Pressure\t=\t2.00",
         "dev2/site2 Pressure\t=\t1.00",
-    }
+    ]
+    assert stats.get_result().splitlines() == expected_device
+
+    expected_asc = [
+        "dev2/site2 Pressure\t=\t1.00",
+        "dev1/site1 Pressure\t=\t2.00",
+    ]
+    assert stats.get_result(sort_key="value_asc").splitlines() == expected_asc
+
+    expected_desc = [
+        "dev1/site1 Pressure\t=\t2.00",
+        "dev2/site2 Pressure\t=\t1.00",
+    ]
+    assert stats.get_result(sort_key="value_desc").splitlines() == expected_desc
 
 
 def test_standard_deviation_statistic_computes_per_group():
     stats = PopulationStandardDeviationStatistic()
     stats.begin_pass(is_second_pass=False)
-    values = [10.0, 12.0, 14.0]
-    for value in values:
+    values_a = [10.0, 12.0, 14.0]
+    values_b = [20.0, 20.0, 20.0]
+    for value in values_a:
         stats.consume(make_record("site1", "dev1", Metric.TEMPERATURE, Unit.CELSIUS, value))
+    for value in values_b:
+        stats.consume(make_record("site2", "dev2", Metric.TEMPERATURE, Unit.CELSIUS, value))
 
-    expected_stddev = statistics.pstdev(values)
-    expected_line = f"dev1/site1 Temperature\t=\t{expected_stddev:.2f}°C"
+    expected_a = statistics.pstdev(values_a)
+    expected_b = statistics.pstdev(values_b)
 
-    assert stats.get_result() == expected_line
+    expected_device = [
+        f"dev1/site1 Temperature\t=\t{expected_a:.2f}°C",
+        f"dev2/site2 Temperature\t=\t{expected_b:.2f}°C",
+    ]
+    assert stats.get_result().splitlines() == expected_device
+
+    expected_asc = sorted(expected_device, key=lambda s: float(s.split("\t=\t")[1].split("°C")[0]))
+    assert stats.get_result(sort_key="value_asc").splitlines() == expected_asc
+
+    expected_desc = list(reversed(expected_asc))
+    assert stats.get_result(sort_key="value_desc").splitlines() == expected_desc
 
 
 def test_standard_deviation_statistic_unit_mismatch():

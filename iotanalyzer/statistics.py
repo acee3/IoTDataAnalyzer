@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import math
-from typing import Dict, Optional, Tuple
+from typing import Callable, ClassVar, Dict, Literal, Optional, Tuple
 
 from iotanalyzer.models import Metric, Recording, Unit
 
@@ -17,7 +17,25 @@ class Statistic(ABC):
     """
 
     UNKNOWN_VALUE = "N/A"
+    
     requires_second_pass: bool = False
+    
+    SortKeyName = Literal["value_asc", "value_desc", "device_site_metric"]
+    SortKeyFunc = Callable[["Statistic.StatisticEntry"], Tuple[float, str, str, str]]
+
+    _SORT_KEY_FUNCTIONS: ClassVar[Dict[SortKeyName, SortKeyFunc]] = {
+        "value_asc": lambda e: (e.value, e.metric.name, e.device, e.site),
+        "value_desc": lambda e: (-e.value, e.metric.name, e.device, e.site),
+        "device_site_metric": lambda e: (0.0, e.device, e.site, e.metric.name),
+    }
+
+    @dataclass(frozen=True)
+    class StatisticEntry:
+        site: str
+        device: str
+        metric: Metric
+        value: float
+        unit: Optional[Unit] = None
 
     def __init__(self, name: Optional[str] = None) -> None:
         self.name = name or self.__class__.__name__
@@ -30,27 +48,13 @@ class Statistic(ABC):
         """Ingest a single recording into the statistic."""
 
     @abstractmethod
-    def get_result(self) -> str:
+    def get_result(self, sort_key: SortKeyName = "device_site_metric") -> str:
         """Returns the statistic result as a string."""
-
-
-class SingleNumberStatistic(Statistic):
-    @dataclass(frozen=True)
-    class SingleNumberStatisticEntry:
-        site: str
-        device: str
-        metric: Metric
-        value: float
-        unit: Optional[Unit] = None
-    
-    @classmethod
-    def sorted_entries(cls, entries: list[SingleNumberStatisticEntry]) -> list[SingleNumberStatisticEntry]:
-        return sorted(entries, key=lambda e: (e.device, e.site, e.metric.name))
 
     @classmethod
     def format_line(
         cls,
-        statistic_entry: SingleNumberStatisticEntry
+        statistic_entry: StatisticEntry
     ) -> str:
         value_str = f"{statistic_entry.value:.2f}"
         if statistic_entry.unit is not None:
@@ -63,15 +67,20 @@ class SingleNumberStatistic(Statistic):
     @classmethod
     def format_entries(
         cls,
-        entries: list[SingleNumberStatisticEntry]
+        entries: list[StatisticEntry],
+        sort_key: SortKeyName = "device_site_metric",
     ) -> str:
+        try:
+            key_func = cls._SORT_KEY_FUNCTIONS[sort_key]
+        except KeyError as exc:
+            raise ValueError(f"Unsupported sort key: {sort_key}") from exc
         lines = []
-        for entry in cls.sorted_entries(entries):
+        for entry in sorted(entries, key=key_func):
             lines.append(cls.format_line(entry))
         return "\n".join(lines)
 
 
-class AverageStatistic(SingleNumberStatistic):
+class AverageStatistic(Statistic):
     def begin_pass(self, is_second_pass: bool) -> None:
         self._groups: Dict[Tuple[str, str, Metric], Tuple[Unit, float, int]] = {}
 
@@ -84,21 +93,21 @@ class AverageStatistic(SingleNumberStatistic):
             raise ValueError("Inconsistent units in AverageStatistic")
         self._groups[key] = (unit, total + record.value, count + 1)
 
-    def get_result(self) -> str:
+    def get_result(self, sort_key: Statistic.SortKeyName = "device_site_metric") -> str:
         if not self._groups:
             return self.UNKNOWN_VALUE
 
-        statistic_entries = [SingleNumberStatistic.SingleNumberStatisticEntry(
+        statistic_entries = [Statistic.StatisticEntry(
             site=site,
             device=device,
             metric=metric,
             unit=unit,
             value=total / count,
         ) for (site, device, metric), (unit, total, count) in self._groups.items()]
-        return self.format_entries(statistic_entries)
+        return self.format_entries(statistic_entries, sort_key=sort_key)
 
 
-class MinStatistic(SingleNumberStatistic):
+class MinStatistic(Statistic):
     def begin_pass(self, is_second_pass: bool) -> None:
         self._groups: Dict[Tuple[str, str, Metric], Tuple[Unit, float]] = {}
 
@@ -114,21 +123,21 @@ class MinStatistic(SingleNumberStatistic):
         if record.value < current_min:
             self._groups[key] = (unit, record.value)
 
-    def get_result(self) -> str:
+    def get_result(self, sort_key: Statistic.SortKeyName = "device_site_metric") -> str:
         if not self._groups:
             return self.UNKNOWN_VALUE
 
-        statistic_entries = [SingleNumberStatistic.SingleNumberStatisticEntry(
+        statistic_entries = [Statistic.StatisticEntry(
             site=site,
             device=device,
             metric=metric,
             unit=unit,
             value=min_value,
         ) for (site, device, metric), (unit, min_value) in self._groups.items()]
-        return self.format_entries(statistic_entries)
+        return self.format_entries(statistic_entries, sort_key=sort_key)
 
 
-class MaxStatistic(SingleNumberStatistic):
+class MaxStatistic(Statistic):
     def begin_pass(self, is_second_pass: bool) -> None:
         self._groups: Dict[Tuple[str, str, Metric], Tuple[Unit, float]] = {}
 
@@ -144,12 +153,12 @@ class MaxStatistic(SingleNumberStatistic):
         if record.value > current_max:
             self._groups[key] = (unit, record.value)
 
-    def get_result(self) -> str:
+    def get_result(self, sort_key: Statistic.SortKeyName = "device_site_metric") -> str:
         if not self._groups:
             return self.UNKNOWN_VALUE
 
         statistic_entries = [
-            SingleNumberStatistic.SingleNumberStatisticEntry(
+            Statistic.StatisticEntry(
                 site=site,
                 device=device,
                 metric=metric,
@@ -158,10 +167,10 @@ class MaxStatistic(SingleNumberStatistic):
             )
             for (site, device, metric), (unit, max_value) in self._groups.items()
         ]
-        return self.format_entries(statistic_entries)
+        return self.format_entries(statistic_entries, sort_key=sort_key)
 
 
-class CountStatistic(SingleNumberStatistic):
+class CountStatistic(Statistic):
     def begin_pass(self, is_second_pass: bool) -> None:
         self._counts: Dict[Tuple[str, str, Metric], int] = {}
 
@@ -169,12 +178,12 @@ class CountStatistic(SingleNumberStatistic):
         key = (record.site, record.device, record.metric)
         self._counts[key] = self._counts.get(key, 0) + 1
 
-    def get_result(self) -> str:
+    def get_result(self, sort_key: Statistic.SortKeyName = "device_site_metric") -> str:
         if not self._counts:
             return self.UNKNOWN_VALUE
 
         statistic_entries = [
-            SingleNumberStatistic.SingleNumberStatisticEntry(
+            Statistic.StatisticEntry(
                 site=site,
                 device=device,
                 metric=metric,
@@ -183,10 +192,10 @@ class CountStatistic(SingleNumberStatistic):
             )
             for (site, device, metric), count in self._counts.items()
         ]
-        return self.format_entries(statistic_entries)
+        return self.format_entries(statistic_entries, sort_key=sort_key)
 
 
-class PopulationStandardDeviationStatistic(SingleNumberStatistic):
+class PopulationStandardDeviationStatistic(Statistic):
     def begin_pass(self, is_second_pass: bool) -> None:
         self._groups: Dict[Tuple[str, str, Metric], Tuple[Unit, int, float, float]] = {}
 
@@ -208,11 +217,11 @@ class PopulationStandardDeviationStatistic(SingleNumberStatistic):
         m2 += delta * delta2
         self._groups[key] = (unit, count, mean, m2)
 
-    def get_result(self) -> str:
+    def get_result(self, sort_key: Statistic.SortKeyName = "device_site_metric") -> str:
         if not self._groups:
             return self.UNKNOWN_VALUE
 
-        statistic_entries: list[SingleNumberStatistic.SingleNumberStatisticEntry] = []
+        statistic_entries: list[Statistic.StatisticEntry] = []
         for (site, device, metric), (unit, count, _mean, m2) in self._groups.items():
             if count == 0:
                 stddev = float("nan")
@@ -220,7 +229,7 @@ class PopulationStandardDeviationStatistic(SingleNumberStatistic):
                 variance = m2 / count
                 stddev = math.sqrt(variance)
             statistic_entries.append(
-                SingleNumberStatistic.SingleNumberStatisticEntry(
+                Statistic.StatisticEntry(
                     site=site,
                     device=device,
                     metric=metric,
@@ -228,7 +237,7 @@ class PopulationStandardDeviationStatistic(SingleNumberStatistic):
                     value=stddev,
                 )
             )
-        return self.format_entries(statistic_entries)
+        return self.format_entries(statistic_entries, sort_key=sort_key)
 
 
 def statistic_from_string(name: str) -> Statistic:
