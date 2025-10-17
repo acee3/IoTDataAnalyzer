@@ -29,6 +29,10 @@ class Metric(Enum):
 
 
 class Unit(Enum):
+    """Each metric is assumed to have a primary unit associated with it, 
+    which is the units listed in this enum. This can change in the future to
+    adapt to multiple units per metric if needed.
+    """
     RELATIVE_HUMIDITY = ({"%rh"}, Metric.HUMIDITY)
     KILO_PASCAL = ({"kpa"}, Metric.PRESSURE)
     CELSIUS = ({"c"}, Metric.TEMPERATURE)
