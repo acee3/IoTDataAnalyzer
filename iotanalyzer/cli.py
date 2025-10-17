@@ -1,6 +1,8 @@
 import argparse
 import datetime
-from models import Metric, Unit
+from iotanalyzer.models import Metric, Unit
+from iotanalyzer.processor import process_recordings
+from iotanalyzer.statistics import statistic_from_string
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Process IOT sensor data")
@@ -43,6 +45,7 @@ if __name__ == "__main__":
         "--statistic",
         action="extend",
         nargs="+",
+        type=statistic_from_string,
         help="Repeat to request multiple aggregates.",
     )
     
@@ -50,4 +53,7 @@ if __name__ == "__main__":
 
     print(args)
     
-    
+    process_recordings(
+        input_file=args.input_file,
+        statistics=args.statistic
+    )

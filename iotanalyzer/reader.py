@@ -3,7 +3,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Iterator, Union, TextIO
 
-from .models import Recording, Metric, Unit
+from iotanalyzer.models import Recording, Metric, Unit
 
 
 def _parse_timestamp(raw_timestamp: str) -> datetime:

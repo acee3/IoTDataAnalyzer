@@ -1,9 +1,9 @@
-from filters import Filter
-from statistics import Statistic
-from reader import recordings_from_csv
-from models import Recording
+from iotanalyzer.filters import Filter
+from iotanalyzer.statistics import Statistic
+from iotanalyzer.reader import recordings_from_csv
+from iotanalyzer.models import Recording
 
-def process_recordings(input_file: str, output_file: str, filters: list[Filter] = None, statistics: list[Statistic] = None) -> None:
+def process_recordings(input_file: str, filters: list[Filter] | None = None, statistics: list[Statistic] | None = None) -> None:
     
     for stat in statistics or []:
         stat.begin_pass(is_second_pass=False)
