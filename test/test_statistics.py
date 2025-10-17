@@ -54,11 +54,22 @@ def test_average_statistic_groups_by_site_device_metric():
         "dev2/site2 Temperature\t=\t20.00°C",
     ]
 
+    top_desc = stats.get_result(sort_key="value_desc", k=1).splitlines()
+    assert top_desc == ["dev1/site1 Humidity\t=\t45.00%RH"]
+
+    top_asc = stats.get_result(sort_key="value_asc", k=1).splitlines()
+    assert top_asc == ["dev2/site2 Temperature\t=\t20.00°C"]
+
 
 def test_average_statistic_handles_no_data():
     stats = AverageStatistic()
     stats.begin_pass(is_second_pass=False)
     assert stats.get_result() == "N/A"
+
+    # Explicitly requesting zero results should skip output even when data exists.
+    stats.consume(make_record("site1", "dev1", Metric.HUMIDITY, Unit.RELATIVE_HUMIDITY, 40.0))
+    stats.consume(make_record("site1", "dev1", Metric.HUMIDITY, Unit.RELATIVE_HUMIDITY, 42.0))
+    assert stats.get_result(k=0) == ""
 
 
 def test_average_statistic_raises_on_unit_mismatch():
@@ -96,6 +107,13 @@ def test_min_statistic_reports_group_minima():
     ]
     assert stats.get_result(sort_key="value_desc").splitlines() == expected_desc
 
+    assert stats.get_result(sort_key="value_desc", k=1).splitlines() == [
+        "dev1/site1 Humidity\t=\t48.00%RH"
+    ]
+    assert stats.get_result(sort_key="value_asc", k=1).splitlines() == [
+        "dev2/site2 Humidity\t=\t46.00%RH"
+    ]
+
 
 def test_max_statistic_reports_group_maxima():
     stats = MaxStatistic()
@@ -123,6 +141,13 @@ def test_max_statistic_reports_group_maxima():
     ]
     assert stats.get_result(sort_key="value_desc").splitlines() == expected_desc
 
+    assert stats.get_result(sort_key="value_desc", k=1).splitlines() == [
+        "dev1/site1 Temperature\t=\t24.00°C"
+    ]
+    assert stats.get_result(sort_key="value_asc", k=1).splitlines() == [
+        "dev2/site2 Temperature\t=\t22.00°C"
+    ]
+
 
 def test_count_statistic_counts_records_per_group():
     stats = CountStatistic()
@@ -149,6 +174,13 @@ def test_count_statistic_counts_records_per_group():
     ]
     assert stats.get_result(sort_key="value_desc").splitlines() == expected_desc
 
+    assert stats.get_result(sort_key="value_desc", k=1).splitlines() == [
+        "dev1/site1 Pressure\t=\t2.00"
+    ]
+    assert stats.get_result(sort_key="value_asc", k=1).splitlines() == [
+        "dev2/site2 Pressure\t=\t1.00"
+    ]
+
 
 def test_standard_deviation_statistic_computes_per_group():
     stats = PopulationStandardDeviationStatistic()
@@ -174,6 +206,13 @@ def test_standard_deviation_statistic_computes_per_group():
 
     expected_desc = list(reversed(expected_asc))
     assert stats.get_result(sort_key="value_desc").splitlines() == expected_desc
+
+    assert stats.get_result(sort_key="value_desc", k=1).splitlines() == [
+        expected_desc[0]
+    ]
+    assert stats.get_result(sort_key="value_asc", k=1).splitlines() == [
+        expected_asc[0]
+    ]
 
 
 def test_standard_deviation_statistic_unit_mismatch():

@@ -48,7 +48,11 @@ class Statistic(ABC):
         """Ingest a single recording into the statistic."""
 
     @abstractmethod
-    def get_result(self, sort_key: SortKeyName = "device_site_metric") -> str:
+    def get_result(
+        self,
+        sort_key: SortKeyName = "device_site_metric",
+        k: Optional[int] = None,
+    ) -> str:
         """Returns the statistic result as a string."""
 
     @classmethod
@@ -69,13 +73,20 @@ class Statistic(ABC):
         cls,
         entries: list[StatisticEntry],
         sort_key: SortKeyName = "device_site_metric",
+        k: Optional[int] = None,
     ) -> str:
         try:
             key_func = cls._SORT_KEY_FUNCTIONS[sort_key]
         except KeyError as exc:
             raise ValueError(f"Unsupported sort key: {sort_key}") from exc
+        sorted_entries = sorted(entries, key=key_func)
+        if k is not None:
+            if k <= 0:
+                sorted_entries = []
+            else:
+                sorted_entries = sorted_entries[:k]
         lines = []
-        for entry in sorted(entries, key=key_func):
+        for entry in sorted_entries:
             lines.append(cls.format_line(entry))
         return "\n".join(lines)
 
@@ -93,7 +104,11 @@ class AverageStatistic(Statistic):
             raise ValueError("Inconsistent units in AverageStatistic")
         self._groups[key] = (unit, total + record.value, count + 1)
 
-    def get_result(self, sort_key: Statistic.SortKeyName = "device_site_metric") -> str:
+    def get_result(
+        self,
+        sort_key: Statistic.SortKeyName = "device_site_metric",
+        k: Optional[int] = None,
+    ) -> str:
         if not self._groups:
             return self.UNKNOWN_VALUE
 
@@ -104,7 +119,7 @@ class AverageStatistic(Statistic):
             unit=unit,
             value=total / count,
         ) for (site, device, metric), (unit, total, count) in self._groups.items()]
-        return self.format_entries(statistic_entries, sort_key=sort_key)
+        return self.format_entries(statistic_entries, sort_key=sort_key, k=k)
 
 
 class MinStatistic(Statistic):
@@ -123,7 +138,11 @@ class MinStatistic(Statistic):
         if record.value < current_min:
             self._groups[key] = (unit, record.value)
 
-    def get_result(self, sort_key: Statistic.SortKeyName = "device_site_metric") -> str:
+    def get_result(
+        self,
+        sort_key: Statistic.SortKeyName = "device_site_metric",
+        k: Optional[int] = None,
+    ) -> str:
         if not self._groups:
             return self.UNKNOWN_VALUE
 
@@ -134,7 +153,7 @@ class MinStatistic(Statistic):
             unit=unit,
             value=min_value,
         ) for (site, device, metric), (unit, min_value) in self._groups.items()]
-        return self.format_entries(statistic_entries, sort_key=sort_key)
+        return self.format_entries(statistic_entries, sort_key=sort_key, k=k)
 
 
 class MaxStatistic(Statistic):
@@ -153,7 +172,11 @@ class MaxStatistic(Statistic):
         if record.value > current_max:
             self._groups[key] = (unit, record.value)
 
-    def get_result(self, sort_key: Statistic.SortKeyName = "device_site_metric") -> str:
+    def get_result(
+        self,
+        sort_key: Statistic.SortKeyName = "device_site_metric",
+        k: Optional[int] = None,
+    ) -> str:
         if not self._groups:
             return self.UNKNOWN_VALUE
 
@@ -167,7 +190,7 @@ class MaxStatistic(Statistic):
             )
             for (site, device, metric), (unit, max_value) in self._groups.items()
         ]
-        return self.format_entries(statistic_entries, sort_key=sort_key)
+        return self.format_entries(statistic_entries, sort_key=sort_key, k=k)
 
 
 class CountStatistic(Statistic):
@@ -178,7 +201,11 @@ class CountStatistic(Statistic):
         key = (record.site, record.device, record.metric)
         self._counts[key] = self._counts.get(key, 0) + 1
 
-    def get_result(self, sort_key: Statistic.SortKeyName = "device_site_metric") -> str:
+    def get_result(
+        self,
+        sort_key: Statistic.SortKeyName = "device_site_metric",
+        k: Optional[int] = None,
+    ) -> str:
         if not self._counts:
             return self.UNKNOWN_VALUE
 
@@ -192,7 +219,7 @@ class CountStatistic(Statistic):
             )
             for (site, device, metric), count in self._counts.items()
         ]
-        return self.format_entries(statistic_entries, sort_key=sort_key)
+        return self.format_entries(statistic_entries, sort_key=sort_key, k=k)
 
 
 class PopulationStandardDeviationStatistic(Statistic):
@@ -217,7 +244,11 @@ class PopulationStandardDeviationStatistic(Statistic):
         m2 += delta * delta2
         self._groups[key] = (unit, count, mean, m2)
 
-    def get_result(self, sort_key: Statistic.SortKeyName = "device_site_metric") -> str:
+    def get_result(
+        self,
+        sort_key: Statistic.SortKeyName = "device_site_metric",
+        k: Optional[int] = None,
+    ) -> str:
         if not self._groups:
             return self.UNKNOWN_VALUE
 
@@ -237,7 +268,7 @@ class PopulationStandardDeviationStatistic(Statistic):
                     value=stddev,
                 )
             )
-        return self.format_entries(statistic_entries, sort_key=sort_key)
+        return self.format_entries(statistic_entries, sort_key=sort_key, k=k)
 
 
 def statistic_from_string(name: str) -> Statistic:
