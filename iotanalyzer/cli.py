@@ -41,7 +41,7 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--aggregate",
+        "--statistic",
         action="extend",
         nargs="+",
         help="Repeat to request multiple aggregates.",
@@ -50,3 +50,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     print(args)
+    
+    
