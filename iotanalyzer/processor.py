@@ -1,7 +1,6 @@
 from iotanalyzer.filters import Filter
 from iotanalyzer.statistics import Statistic
 from iotanalyzer.reader import recordings_from_csv
-from iotanalyzer.models import Recording
 
 def process_recordings(input_file: str, filters: list[Filter] | None = None, statistics: list[Statistic] | None = None) -> None:
     
