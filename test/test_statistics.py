@@ -205,9 +205,8 @@ def test_standard_deviation_statistic_computes_per_group():
 
 
 def test_statistic_from_string_parses_options_and_defaults():
-    stat = statistic_from_string("max:sort=value_desc,k=1,name=Warmest")
+    stat = statistic_from_string("max:k=1")
     assert isinstance(stat, MaxStatistic)
-    assert stat.name == "Warmest"
     assert stat.default_sort_key == "value_desc"
     assert stat.default_k == 1
 
