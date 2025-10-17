@@ -5,11 +5,13 @@ import pytest
 
 from iotanalyzer.models import Metric, Recording, Unit
 from iotanalyzer.statistics import (
+    AnomalyDetectionCountStatistic,
     AverageStatistic,
     CountStatistic,
     MaxStatistic,
     MinStatistic,
     PopulationStandardDeviationStatistic,
+    Statistic,
     statistic_from_string,
 )
 
@@ -231,3 +233,41 @@ def test_standard_deviation_statistic_unit_mismatch():
 
     with pytest.raises(ValueError):
         stats.consume(make_record("site1", "dev1", Metric.HUMIDITY, Unit.CELSIUS, 45.0))
+
+
+def test_anomaly_detection_flags_values_beyond_three_sigma():
+    stats = AnomalyDetectionCountStatistic()
+    stats.begin_pass(is_second_pass=False)
+
+    records = []
+    for _ in range(10):
+        rec = make_record("site1", "dev1", Metric.TEMPERATURE, Unit.CELSIUS, 10.0)
+        records.append(rec)
+        stats.consume(rec)
+    outlier = make_record("site1", "dev1", Metric.TEMPERATURE, Unit.CELSIUS, 100.0)
+    records.append(outlier)
+    stats.consume(outlier)
+
+    stats.begin_pass(is_second_pass=True)
+    for rec in records:
+        stats.consume(rec)
+
+    result = stats.get_result()
+    assert result == "dev1/site1 Temperature\t=\t1.00"
+    key = ("site1", "dev1", Metric.TEMPERATURE)
+    assert len(stats._outliers[key]) == 1
+    assert stats._outliers[key][0].value == 100.0
+
+
+def test_anomaly_detection_returns_na_when_no_outliers():
+    stats = AnomalyDetectionCountStatistic()
+    stats.begin_pass(is_second_pass=False)
+    records = [make_record("site1", "dev1", Metric.HUMIDITY, Unit.RELATIVE_HUMIDITY, 45.0) for _ in range(5)]
+    for rec in records:
+        stats.consume(rec)
+
+    stats.begin_pass(is_second_pass=True)
+    for rec in records:
+        stats.consume(rec)
+
+    assert stats.get_result() == Statistic.UNKNOWN_VALUE

@@ -307,6 +307,81 @@ class PopulationStandardDeviationStatistic(Statistic):
         return self.format_entries(statistic_entries, sort_key=effective_sort, k=effective_k)
 
 
+class AnomalyDetectionCountStatistic(Statistic):
+    requires_second_pass = True
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._stats: Dict[Tuple[str, str, Metric], Tuple[Unit, int, float, float]] = {}
+        self._outliers: Dict[Tuple[str, str, Metric], list[Recording]] = {}
+        self._in_second_pass: bool = False
+
+    def begin_pass(self, is_second_pass: bool) -> None:
+        self._in_second_pass = is_second_pass
+        if not is_second_pass:
+            self._stats = {}
+            self._outliers = {}
+        else:
+            for key in self._stats:
+                self._outliers.setdefault(key, [])
+
+    def consume(self, record: Recording) -> None:
+        key = (record.site, record.device, record.metric)
+        if not self._in_second_pass:
+            unit = record.unit
+            if key not in self._stats:
+                self._stats[key] = (unit, 0, 0.0, 0.0)
+
+            current_unit, count, mean, m2 = self._stats[key]
+            if current_unit != unit:
+                raise ValueError("Inconsistent units in AnomalyDetectionStatistic")
+
+            count += 1
+            delta = record.value - mean
+            mean += delta / count
+            delta2 = record.value - mean
+            m2 += delta * delta2
+            self._stats[key] = (unit, count, mean, m2)
+        else:
+            if key not in self._stats:
+                return
+            unit, count, mean, m2 = self._stats[key]
+            if count < 2:
+                return
+            variance = m2 / count
+            stddev = math.sqrt(variance)
+            if stddev == 0:
+                return
+            if abs(record.value - mean) > 3 * stddev:
+                self._outliers[key].append(record)
+
+    def get_result(
+        self,
+        sort_key: Optional[Statistic.SortKeyName] = None,
+        k: Optional[int] = None,
+    ) -> str:
+        entries: list[Statistic.StatisticEntry] = []
+        for (site, device, metric), (unit, count, mean, m2) in self._stats.items():
+            outliers = self._outliers.get((site, device, metric), [])
+            if not outliers:
+                continue
+            entries.append(
+                Statistic.StatisticEntry(
+                    site=site,
+                    device=device,
+                    metric=metric,
+                    unit=None,
+                    value=float(len(outliers)),
+                )
+            )
+        if not entries:
+            return self.UNKNOWN_VALUE
+
+        effective_sort = sort_key or self.default_sort_key
+        effective_k = self.default_k if k is None else k
+        return self.format_entries(entries, sort_key=effective_sort, k=effective_k)
+
+
 def statistic_from_string(name: str) -> Statistic:
     """
     Parse a statistic specification string.
@@ -317,7 +392,6 @@ def statistic_from_string(name: str) -> Statistic:
     Supported options:
         - sort: one of Statistic.SortKeyName values
         - k: positive integer (top-k results, default 10). Use "all" (or empty) for all rows.
-        - name: optional custom display name for the statistic
     """
     mapping: dict[str, type[Statistic]] = {
         "average": AverageStatistic,
@@ -325,6 +399,7 @@ def statistic_from_string(name: str) -> Statistic:
         "max": MaxStatistic,
         "count": CountStatistic,
         "population_stddev": PopulationStandardDeviationStatistic,
+        "anomaly_count": AnomalyDetectionCountStatistic,
     }
     spec = name.strip()
     if not spec:
