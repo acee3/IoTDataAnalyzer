@@ -26,4 +26,5 @@ def process_recordings(input_file: str, filters: list[Filter] | None = None, sta
                 stat.consume(record)
 
     for stat in statistics or []:
-        print("Results for", stat.name, ":", stat.get_result(), "\n")
+        print("Results for", stat.name)
+        print(stat.get_result(), "\n")

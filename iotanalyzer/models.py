@@ -8,6 +8,10 @@ class Metric(Enum):
     HUMIDITY = {"hum", "humidity"}
     PRESSURE = {"press", "pressure"}
     
+    @property 
+    def display_name(self) -> str:
+        return self.name.capitalize()
+    
     @property
     def alias_set(self) -> set[str]:
         return self.value
