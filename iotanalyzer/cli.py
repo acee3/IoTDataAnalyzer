@@ -1,6 +1,17 @@
 import argparse
 import datetime
-from iotanalyzer.models import Metric, Unit
+from datetime import timezone
+from typing import List
+
+from iotanalyzer.filters import (
+    Filter,
+    device_filter,
+    end_time_filter,
+    metric_filter,
+    site_filter,
+    start_time_filter,
+)
+from iotanalyzer.models import Metric
 from iotanalyzer.processor import process_recordings
 from iotanalyzer.statistics import statistic_from_string
 
@@ -8,15 +19,18 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Process IOT sensor data")
     parser.add_argument("input_file", type=str, help="The input file to process")
     
-    convert_to_datetime = lambda s: datetime.datetime.strptime(s, '%Y-%m-%d %H:%M:%S')
+    def parse_datetime(value: str) -> datetime.datetime:
+        naive = datetime.datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+        return naive.replace(tzinfo=timezone.utc)
+
     parser.add_argument(
         "--start", 
-        type=convert_to_datetime, 
+        type=parse_datetime, 
         help="Only include recordings after this time in YYYY-MM-DD HH:MM:SS format"
     )
     parser.add_argument(
         "--end", 
-        type=convert_to_datetime, 
+        type=parse_datetime, 
         help="Only include recordings before this time in YYYY-MM-DD HH:MM:SS format"
     )
     parser.add_argument(
@@ -37,7 +51,7 @@ if __name__ == "__main__":
         "--device", 
         action="extend", 
         nargs="*", 
-        type=Unit.from_string, 
+        type=str,
         help="Only include recordings for these devices"
     )
 
@@ -55,9 +69,20 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
 
-    print(args)
-    
+    filters: List[Filter] = []
+    if args.start:
+        filters.append(start_time_filter(args.start))
+    if args.end:
+        filters.append(end_time_filter(args.end))
+    if args.site:
+        filters.append(site_filter(args.site))
+    if args.metric:
+        filters.append(metric_filter(args.metric))
+    if args.device:
+        filters.append(device_filter(args.device))
+
     process_recordings(
         input_file=args.input_file,
+        filters=filters,
         statistics=args.statistic
     )
