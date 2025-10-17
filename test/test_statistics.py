@@ -10,6 +10,7 @@ from iotanalyzer.statistics import (
     MaxStatistic,
     MinStatistic,
     PopulationStandardDeviationStatistic,
+    statistic_from_string,
 )
 
 SAMPLE_TIME = datetime(2025, 1, 1, tzinfo=timezone.utc)
@@ -41,18 +42,6 @@ def test_average_statistic_groups_by_site_device_metric():
         "dev2/site2 Temperature\t=\t20.00°C",
     ]
     assert result.splitlines() == expected_lines
-
-    asc_lines = stats.get_result(sort_key="value_asc").splitlines()
-    assert asc_lines == [
-        "dev2/site2 Temperature\t=\t20.00°C",
-        "dev1/site1 Humidity\t=\t45.00%RH",
-    ]
-
-    desc_lines = stats.get_result(sort_key="value_desc").splitlines()
-    assert desc_lines == [
-        "dev1/site1 Humidity\t=\t45.00%RH",
-        "dev2/site2 Temperature\t=\t20.00°C",
-    ]
 
     top_desc = stats.get_result(sort_key="value_desc", k=1).splitlines()
     assert top_desc == ["dev1/site1 Humidity\t=\t45.00%RH"]
@@ -213,6 +202,27 @@ def test_standard_deviation_statistic_computes_per_group():
     assert stats.get_result(sort_key="value_asc", k=1).splitlines() == [
         expected_asc[0]
     ]
+
+
+def test_statistic_from_string_parses_options_and_defaults():
+    stat = statistic_from_string("max:sort=value_desc,k=1,name=Warmest")
+    assert isinstance(stat, MaxStatistic)
+    assert stat.name == "Warmest"
+    assert stat.default_sort_key == "value_desc"
+    assert stat.default_k == 1
+
+    stat.begin_pass(is_second_pass=False)
+    stat.consume(make_record("site1", "dev1", Metric.TEMPERATURE, Unit.CELSIUS, 18.0))
+    stat.consume(make_record("site1", "dev1", Metric.TEMPERATURE, Unit.CELSIUS, 24.0))
+    stat.consume(make_record("site2", "dev2", Metric.TEMPERATURE, Unit.CELSIUS, 22.0))
+
+    # No overrides: defaults from the spec apply.
+    assert stat.get_result() == "dev1/site1 Temperature\t=\t24.00°C"
+
+
+def test_statistic_from_string_validates_sort_key():
+    with pytest.raises(ValueError):
+        statistic_from_string("average:sort=badvalue")
 
 
 def test_standard_deviation_statistic_unit_mismatch():

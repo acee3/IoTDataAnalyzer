@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import math
-from typing import Callable, ClassVar, Dict, Literal, Optional, Tuple
+from typing import Callable, ClassVar, Dict, Literal, Optional, Tuple, cast
 
 from iotanalyzer.models import Metric, Recording, Unit
 
@@ -22,6 +22,8 @@ class Statistic(ABC):
     
     SortKeyName = Literal["value_asc", "value_desc", "device_site_metric"]
     SortKeyFunc = Callable[["Statistic.StatisticEntry"], Tuple[float, str, str, str]]
+    DEFAULT_SORT_KEY: ClassVar[SortKeyName] = "value_desc"
+    DEFAULT_K: ClassVar[Optional[int]] = 10
 
     _SORT_KEY_FUNCTIONS: ClassVar[Dict[SortKeyName, SortKeyFunc]] = {
         "value_asc": lambda e: (e.value, e.metric.name, e.device, e.site),
@@ -37,8 +39,19 @@ class Statistic(ABC):
         value: float
         unit: Optional[Unit] = None
 
-    def __init__(self, name: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        name: Optional[str] = None,
+        default_sort_key: SortKeyName = DEFAULT_SORT_KEY,
+        default_k: Optional[int] = DEFAULT_K,
+    ) -> None:
         self.name = name or self.__class__.__name__
+        if default_sort_key not in self._SORT_KEY_FUNCTIONS:
+            raise ValueError(f"Unsupported default sort key: {default_sort_key}")
+        if default_k is not None and default_k < 0:
+            raise ValueError("default_k must be non-negative or None")
+        self._default_sort_key: Statistic.SortKeyName = default_sort_key
+        self._default_k: Optional[int] = default_k
 
     def begin_pass(self, is_second_pass: bool) -> None:
         """Hook to reset per-pass state. Called before each pass."""
@@ -50,10 +63,18 @@ class Statistic(ABC):
     @abstractmethod
     def get_result(
         self,
-        sort_key: SortKeyName = "device_site_metric",
+        sort_key: Optional[SortKeyName] = None,
         k: Optional[int] = None,
     ) -> str:
         """Returns the statistic result as a string."""
+
+    @property
+    def default_sort_key(self) -> SortKeyName:
+        return self._default_sort_key
+
+    @property
+    def default_k(self) -> Optional[int]:
+        return self._default_k
 
     @classmethod
     def format_line(
@@ -72,8 +93,8 @@ class Statistic(ABC):
     def format_entries(
         cls,
         entries: list[StatisticEntry],
-        sort_key: SortKeyName = "device_site_metric",
-        k: Optional[int] = None,
+        sort_key: SortKeyName = DEFAULT_SORT_KEY,
+        k: Optional[int] = DEFAULT_K,
     ) -> str:
         try:
             key_func = cls._SORT_KEY_FUNCTIONS[sort_key]
@@ -106,11 +127,14 @@ class AverageStatistic(Statistic):
 
     def get_result(
         self,
-        sort_key: Statistic.SortKeyName = "device_site_metric",
+        sort_key: Optional[Statistic.SortKeyName] = None,
         k: Optional[int] = None,
     ) -> str:
         if not self._groups:
             return self.UNKNOWN_VALUE
+
+        effective_sort = sort_key or self.default_sort_key
+        effective_k = self.default_k if k is None else k
 
         statistic_entries = [Statistic.StatisticEntry(
             site=site,
@@ -119,7 +143,7 @@ class AverageStatistic(Statistic):
             unit=unit,
             value=total / count,
         ) for (site, device, metric), (unit, total, count) in self._groups.items()]
-        return self.format_entries(statistic_entries, sort_key=sort_key, k=k)
+        return self.format_entries(statistic_entries, sort_key=effective_sort, k=effective_k)
 
 
 class MinStatistic(Statistic):
@@ -140,11 +164,14 @@ class MinStatistic(Statistic):
 
     def get_result(
         self,
-        sort_key: Statistic.SortKeyName = "device_site_metric",
+        sort_key: Optional[Statistic.SortKeyName] = None,
         k: Optional[int] = None,
     ) -> str:
         if not self._groups:
             return self.UNKNOWN_VALUE
+
+        effective_sort = sort_key or self.default_sort_key
+        effective_k = self.default_k if k is None else k
 
         statistic_entries = [Statistic.StatisticEntry(
             site=site,
@@ -153,7 +180,7 @@ class MinStatistic(Statistic):
             unit=unit,
             value=min_value,
         ) for (site, device, metric), (unit, min_value) in self._groups.items()]
-        return self.format_entries(statistic_entries, sort_key=sort_key, k=k)
+        return self.format_entries(statistic_entries, sort_key=effective_sort, k=effective_k)
 
 
 class MaxStatistic(Statistic):
@@ -174,11 +201,14 @@ class MaxStatistic(Statistic):
 
     def get_result(
         self,
-        sort_key: Statistic.SortKeyName = "device_site_metric",
+        sort_key: Optional[Statistic.SortKeyName] = None,
         k: Optional[int] = None,
     ) -> str:
         if not self._groups:
             return self.UNKNOWN_VALUE
+
+        effective_sort = sort_key or self.default_sort_key
+        effective_k = self.default_k if k is None else k
 
         statistic_entries = [
             Statistic.StatisticEntry(
@@ -190,7 +220,7 @@ class MaxStatistic(Statistic):
             )
             for (site, device, metric), (unit, max_value) in self._groups.items()
         ]
-        return self.format_entries(statistic_entries, sort_key=sort_key, k=k)
+        return self.format_entries(statistic_entries, sort_key=effective_sort, k=effective_k)
 
 
 class CountStatistic(Statistic):
@@ -203,11 +233,14 @@ class CountStatistic(Statistic):
 
     def get_result(
         self,
-        sort_key: Statistic.SortKeyName = "device_site_metric",
+        sort_key: Optional[Statistic.SortKeyName] = None,
         k: Optional[int] = None,
     ) -> str:
         if not self._counts:
             return self.UNKNOWN_VALUE
+
+        effective_sort = sort_key or self.default_sort_key
+        effective_k = self.default_k if k is None else k
 
         statistic_entries = [
             Statistic.StatisticEntry(
@@ -219,7 +252,7 @@ class CountStatistic(Statistic):
             )
             for (site, device, metric), count in self._counts.items()
         ]
-        return self.format_entries(statistic_entries, sort_key=sort_key, k=k)
+        return self.format_entries(statistic_entries, sort_key=effective_sort, k=effective_k)
 
 
 class PopulationStandardDeviationStatistic(Statistic):
@@ -246,11 +279,14 @@ class PopulationStandardDeviationStatistic(Statistic):
 
     def get_result(
         self,
-        sort_key: Statistic.SortKeyName = "device_site_metric",
+        sort_key: Optional[Statistic.SortKeyName] = None,
         k: Optional[int] = None,
     ) -> str:
         if not self._groups:
             return self.UNKNOWN_VALUE
+
+        effective_sort = sort_key or self.default_sort_key
+        effective_k = self.default_k if k is None else k
 
         statistic_entries: list[Statistic.StatisticEntry] = []
         for (site, device, metric), (unit, count, _mean, m2) in self._groups.items():
@@ -268,10 +304,21 @@ class PopulationStandardDeviationStatistic(Statistic):
                     value=stddev,
                 )
             )
-        return self.format_entries(statistic_entries, sort_key=sort_key, k=k)
+        return self.format_entries(statistic_entries, sort_key=effective_sort, k=effective_k)
 
 
 def statistic_from_string(name: str) -> Statistic:
+    """
+    Parse a statistic specification string.
+
+    The basic form is "<statistic_name>".
+    Options can be provided after a colon, separated by commas, e.g.:
+        "average:sort=value_desc,k=5"
+    Supported options:
+        - sort: one of Statistic.SortKeyName values
+        - k: positive integer (top-k results, default 10). Use "all" (or empty) for all rows.
+        - name: optional custom display name for the statistic
+    """
     mapping: dict[str, type[Statistic]] = {
         "average": AverageStatistic,
         "min": MinStatistic,
@@ -279,6 +326,51 @@ def statistic_from_string(name: str) -> Statistic:
         "count": CountStatistic,
         "population_stddev": PopulationStandardDeviationStatistic,
     }
-    if name not in mapping:
-        raise ValueError(f"Unknown statistic: {name}")
-    return mapping[name]()
+    spec = name.strip()
+    if not spec:
+        raise ValueError("Statistic specification cannot be empty")
+
+    stat_name, _, options = spec.partition(":")
+    stat_key = stat_name.strip().lower()
+    if stat_key not in mapping:
+        raise ValueError(f"Unknown statistic: {stat_name}")
+
+    sort_key: Statistic.SortKeyName = Statistic.DEFAULT_SORT_KEY
+    default_k: Optional[int] = Statistic.DEFAULT_K
+    custom_name: Optional[str] = None
+
+    if options:
+        for raw_option in options.split(","):
+            option = raw_option.strip()
+            if not option:
+                continue
+            key, sep, value = option.partition("=")
+            if not sep:
+                raise ValueError(f"Invalid statistic option '{option}'. Expected key=value.")
+            key = key.strip().lower()
+            value = value.strip()
+
+            if key == "sort":
+                sort_candidate = value.lower()
+                if sort_candidate not in Statistic._SORT_KEY_FUNCTIONS:
+                    allowed = ", ".join(Statistic._SORT_KEY_FUNCTIONS.keys())
+                    raise ValueError(f"Unsupported sort key '{value}'. Allowed values: {allowed}")
+                sort_key = cast(Statistic.SortKeyName, sort_candidate)
+            elif key == "k":
+                if value.lower() in {"", "all", "none"}:
+                    default_k = None
+                else:
+                    try:
+                        parsed_k = int(value)
+                    except ValueError as exc:
+                        raise ValueError(f"Invalid integer for k: {value}") from exc
+                    if parsed_k < 0:
+                        raise ValueError("k must be non-negative")
+                    default_k = parsed_k
+            elif key == "name":
+                custom_name = value
+            else:
+                raise ValueError(f"Unknown statistic option '{key}'")
+
+    stat_cls = mapping[stat_key]
+    return stat_cls(name=custom_name, default_sort_key=sort_key, default_k=default_k)

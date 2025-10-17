@@ -46,7 +46,11 @@ if __name__ == "__main__":
         action="extend",
         nargs="+",
         type=statistic_from_string,
-        help="Repeat to request multiple aggregates.",
+        help=(
+            "Repeat to request multiple aggregates. "
+            "Format: name[:option=value,...]. "
+            "Options: sort={value_asc,value_desc,device_site_metric}, k=<int>, name=<label>."
+        ),
     )
     
     args = parser.parse_args()
