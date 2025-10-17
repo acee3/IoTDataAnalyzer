@@ -5,7 +5,6 @@ from models import Metric, Unit
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Process IOT sensor data")
     parser.add_argument("input_file", type=str, help="The input file to process")
-    parser.add_argument("output_file", type=str, help="The output file to write")
     
     convert_to_datetime = lambda s: datetime.datetime.strptime(s, '%Y-%m-%d %H:%M:%S')
     parser.add_argument(
@@ -41,7 +40,7 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--aggregate",
+        "--statistic",
         action="extend",
         nargs="+",
         help="Repeat to request multiple aggregates.",
@@ -50,3 +49,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     print(args)
+    
+    
