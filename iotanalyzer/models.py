@@ -33,9 +33,9 @@ class Unit(Enum):
     which is the units listed in this enum. This can change in the future to
     adapt to multiple units per metric if needed.
     """
-    RELATIVE_HUMIDITY = ({"%rh"}, Metric.HUMIDITY)
-    KILO_PASCAL = ({"kpa"}, Metric.PRESSURE)
-    CELSIUS = ({"c"}, Metric.TEMPERATURE)
+    RELATIVE_HUMIDITY = ({"%rh"}, Metric.HUMIDITY, "%RH")
+    KILO_PASCAL = ({"kpa"}, Metric.PRESSURE, "kPa")
+    CELSIUS = ({"c"}, Metric.TEMPERATURE, "°C")
 
     @property
     def alias_set(self) -> set[str]:
@@ -45,6 +45,10 @@ class Unit(Enum):
     def metric(self) -> Metric:
         return self.value[1]
     
+    @property
+    def display_name(self) -> str:
+        return self.value[2]
+
     @classmethod
     def from_string(cls, unit_name: str) -> "Unit":
         """Convert a string to a Unit enum, handling aliases and casing
