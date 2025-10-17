@@ -19,10 +19,9 @@ class Metric(Enum):
             ValueError: If the metric name is not found
         """
         for metric in cls:
-            if metric_name.lower() in metric.value:
+            if metric_name.strip().lower() in metric.value:
                 return metric
         raise ValueError(f"Unknown metric: {metric_name}")
-
 
 
 class Unit(Enum):
@@ -45,7 +44,7 @@ class Unit(Enum):
             ValueError: If the unit name is not found
         """
         for unit in cls:
-            if unit_name.lower() in unit.value:
+            if unit_name.strip().lower() in unit.value:
                 return unit
         raise ValueError(f"Unknown unit: {unit_name}")
 
